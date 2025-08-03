@@ -99,7 +99,7 @@ async def open_weather_action(text: str):
                         response = await session.get(f"https://api.openweathermap.org/data/3.0/onecall?lat={coords.get('lat')}&lon={coords.get('lon')}&appid={api_key}&units=imperial")
                         if response.status == 200:
                             json_response = await response.json()
-                            logger.debug(json_response)
+                            logger.debug(f"Weather response: {json_response}")
                             weather = json_response.get('current').get('weather')[0].get('main')
                             temp = json_response.get('current').get('temp')
                             combined_response = f"It is currently {round(float(temp))} degrees and {weather.lower()} in {city}."
@@ -201,7 +201,7 @@ async def open_weather_action(text: str):
                     response = await session.get(f"http://api.openweathermap.org/data/3.0/onecall?lat={coords.get('lat')}&lon={coords.get('lon')}&appid={api_key}&units=imperial")
                     if response.status == 200:
                         json_response = await response.json()
-                        logger.debug(json_response)
+                        logger.debug(f"Weather response: {json_response}")
                         weather = json_response.get('current').get('weather')[0].get('main')
                         temp = json_response.get('current').get('temp')
                         combined_response = f"It is currently {round(float(temp))} degrees and {weather.lower()} in your location."

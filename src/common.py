@@ -71,6 +71,9 @@ executor = ThreadPoolExecutor()
 
 # Initialize the speech recognition engine
 r = sr.Recognizer()
+logger.info("Microphones availables:")
+for index, name in enumerate(sr.Microphone.list_microphone_names()):
+    logger.info(f"Microphone {index}: {name}")
 
 # Initialize the LiteLLM API key
 with open("settings.json", "r") as f:
@@ -171,6 +174,8 @@ def load_settings():
         return settings
 
 async def updateLCD(text, display, stop_event=None, delay=0.02):
+    logger.info(f"Displaying text on LCD if present: {text}")
+
     if display is None:
         return  # Skip updating the display if it's not initialized
     
@@ -233,6 +238,7 @@ async def listen(display, state_task, stop_event):
         try:
             with sr.Microphone() as source:
                 if source.stream is None:
+                    logger.error("Microphone not initialized.")
                     raise Exception("Microphone not initialized.")
                 
                 listening = False  # Initialize variable for feedback
@@ -260,6 +266,11 @@ async def listen(display, state_task, stop_event):
             if source and source.stream:
                 source.stream.close()
             raise asyncio.TimeoutError("Listening timed out.")
+        except OSError as e:
+            logger.error("Microphone not available.")
+            logger.debug(f"Microphone not available: {e}")
+            raise Exception("Microphone not available.")
+
 
     text = await loop.run_in_executor(executor, recognize_audio, loop, state_task, stop_event)
     return text
