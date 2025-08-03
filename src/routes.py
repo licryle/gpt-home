@@ -1,5 +1,6 @@
 from semantic_router.layer import RouteLayer
 import semantic_router.encoders as encoders
+from semantic_router.encoders import HuggingFaceEncoder
 from semantic_router import Route
 
 from actions import *
@@ -11,11 +12,19 @@ def refresh_api_key():
         API_KEY = json.load(f)["openai_api_key"]
     os.environ["OPENAI_API_KEY"] = API_KEY
 
-refresh_api_key()
+    if API_KEY == "" or API_KEY is None:
+        logger.info("No OpenAI Key provided")
 
-encoder = encoders.OpenAIEncoder(
-    name="text-embedding-3-large", score_threshold=0.5, dimensions=256
-)
+try:
+    encoder = HuggingFaceEncoder(model_name="all-MiniLM-L6-v2")
+except Exception as e:
+    logger.debug(f"Error initializing encoder: {e}")
+
+logger.info(f"Encoder: {encoder}")
+if encoder is not None:
+    logger.info("Encoder initialized")
+else:
+    logger.error("Encoder not initialized")
 
 # Define routes
 alarm_route = Route(
@@ -125,6 +134,7 @@ class Action:
             return "Action failed due to an error."
 
 async def action_router(text: str, router=ActionRouter()):
+    logger.info("hello")
     refresh_api_key()
     try:
         action_name = router.resolve(text)
@@ -133,3 +143,20 @@ async def action_router(text: str, router=ActionRouter()):
     except Exception as e:
         logger.error(f"Error in action_router: {e}")
         return "Action routing failed due to an error."
+
+
+
+def my_log_handler(record):
+    # This function will be called on every log record
+    if record.levelno >= logging.ERROR and "Exception occurred" in record.getMessage():
+        logger.error("Caught semantic-router exception log:", record.getMessage())
+        # You could raise, store, or handle the error here
+    # Optionally, return False to prevent further propagation
+
+class CustomHandler(logging.Handler):
+    def emit(self, record):
+        my_log_handler(record)
+
+sem_logger = logging.getLogger("semantic_router.utils.logger")
+sem_logger.addHandler(CustomHandler())
+sem_logger.setLevel(logging.ERROR)
