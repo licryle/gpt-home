@@ -2,6 +2,8 @@
 
 latest_release=$(curl -s https://api.github.com/repos/judahpaul16/gpt-home/releases/latest | grep 'tag_name' | cut -d\" -f4)
 
+architecture='arm64'
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -128,7 +130,7 @@ EOF
 
 # Install Docker Buildx plugin
 mkdir -p $HOME/.docker/cli-plugins
-curl -Lo $HOME/.docker/cli-plugins/docker-buildx https://github.com/docker/buildx/releases/download/v0.14.0/buildx-v0.14.0.linux-arm64
+curl -Lo $HOME/.docker/cli-plugins/docker-buildx https://github.com/docker/buildx/releases/download/v0.26.1/buildx-v0.26.1.linux-$architecture 
 sudo chmod +x $HOME/.docker/cli-plugins/docker-buildx
 docker buildx version
 
@@ -178,7 +180,7 @@ sudo systemctl status --no-pager nginx
 
 if [[ "$1" != "--no-build" ]]; then
     [ -d ~/gpt-home ] && rm -rf ~/gpt-home
-    git clone https://github.com/judahpaul16/gpt-home ~/gpt-home
+    git clone https://github.com/licryle/gpt-home ~/gpt-home
     cd ~/gpt-home
     echo "Checking if the container 'gpt-home' is already running..."
     if [ $(docker ps -q -f name=gpt-home) ]; then
@@ -203,7 +205,7 @@ if [[ "$1" != "--no-build" ]]; then
 
     # Building Docker image 'gpt-home' for ARMhf architecture
     echo "Building Docker image 'gpt-home' for ARMhf..."
-    timeout 3600 docker buildx build --platform linux/arm64 -t gpt-home --load .
+    timeout 3600 docker buildx build --platform linux/$architecture -t gpt-home --load .
 
     if [ $? -ne 0 ]; then
         echo "Docker build failed. Exiting..."
