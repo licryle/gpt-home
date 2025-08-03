@@ -1,8 +1,11 @@
 from common import *
+from routes import *
 
 async def main():
     state_task = None
     semaphore = asyncio.Semaphore(10)  # Limit to 10 concurrent tasks
+
+    logger.info("Main function called")
 
     async def limited_task(task):
         async with semaphore:
@@ -12,13 +15,15 @@ async def main():
         try:
             await task
         except Exception as e:
-            logger.error(f"Task failed: {e}")
+            logger.error(f"Task failed")
+            logger.debug(f"Task failed: {e}")
 
     while True:
         try:
             # Load settings from settings.json
             settings = load_settings()
             keyword = settings.get("keyword")
+            logger.info(f"Listening for keyword {keyword}")
 
             # Start displaying 'Listening'
             stop_event = asyncio.Event()
@@ -27,7 +32,8 @@ async def main():
             try:
                 text = await listen(display, state_task, stop_event)
             except Exception as e:
-                logger.error(f"Listening timed out: {traceback.format_exc()}")
+                logger.error(f"Listening failed")
+                logger.debug(f"Listening failed: {traceback.format_exc()}")
                 continue
 
             # Stop displaying 'Listening'
@@ -99,6 +105,8 @@ if __name__ == "__main__":
         settings = load_settings()
         api_key = settings.get("litellm_api_key") or settings.get("openai_api_key")
 
+        logger.info(f"Initialize system with API Key: {api_key}")
+
         if not api_key and display:
             display.fill(0)
             ip_address = subprocess.check_output(["hostname", "-I"]).decode("utf-8").split(" ")[0].strip()
@@ -114,7 +122,7 @@ if __name__ == "__main__":
         return display
 
     display = loop.run_until_complete(wrapped_initialize_system())
-    from routes import *
+    refresh_api_key()
 
     async def wrapped_main():
         await init_done_event.wait()  # Wait for the event to be set
