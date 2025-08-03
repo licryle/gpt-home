@@ -30,3 +30,6 @@ events.log
 # Auth
 spotify_token.json
 hashed_password.txt
+
+src/__pycache__
+src/settings.json
