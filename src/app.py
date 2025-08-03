@@ -29,8 +29,12 @@ async def main():
             stop_event = asyncio.Event()
             state_task = asyncio.create_task(display_state("Listening", display, stop_event))
 
+            text = None
             try:
                 text = await listen(display, state_task, stop_event)
+            except OSError as e:
+                logger.error("Microphone not initialized or not available. Sleeping 2 seconds.")
+                await asyncio.sleep(2)
             except Exception as e:
                 logger.error(f"Listening failed")
                 logger.debug(f"Listening failed: {traceback.format_exc()}")

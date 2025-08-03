@@ -238,8 +238,8 @@ async def listen(display, state_task, stop_event):
         try:
             with sr.Microphone() as source:
                 if source.stream is None:
-                    logger.error("Microphone not initialized.")
-                    raise Exception("Microphone not initialized.")
+                    logger.debug("Microphone not initialized.")
+                    raise OSError("Microphone not initialized.")
                 
                 listening = False  # Initialize variable for feedback
                 
@@ -267,9 +267,8 @@ async def listen(display, state_task, stop_event):
                 source.stream.close()
             raise asyncio.TimeoutError("Listening timed out.")
         except OSError as e:
-            logger.error("Microphone not available.")
             logger.debug(f"Microphone not available: {e}")
-            raise Exception("Microphone not available.")
+            raise OSError("Microphone not available.")
 
 
     text = await loop.run_in_executor(executor, recognize_audio, loop, state_task, stop_event)
