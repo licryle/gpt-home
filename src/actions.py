@@ -96,7 +96,7 @@ async def open_weather_action(text: str):
                         return f"No weather data available for {city}. Please check the city name and try again."
                     
                     if api_key:
-                        response = await session.get(f"https://api.openweathermap.org/data/3.0/onecall?lat={coords.get('lat')}&lon={coords.get('lon')}&appid={api_key}&units=imperial")
+                        response = await session.get(f"https://api.openweathermap.org/data/3.0/onecall?lat={coords.get('lat')}&lon={coords.get('lon')}&appid={api_key}&units=metric")
                         if response.status == 200:
                             json_response = await response.json()
                             logger.debug(f"Weather response: {json_response}")
@@ -110,7 +110,7 @@ async def open_weather_action(text: str):
                             )
                     
                     # Fallback to Open-Meteo
-                    response = await session.get(f"https://api.open-meteo.com/v1/forecast?latitude={coords.get('lat')}&longitude={coords.get('lon')}&current_weather=true&temperature_unit=fahrenheit")
+                    response = await session.get(f"https://api.open-meteo.com/v1/forecast?latitude={coords.get('lat')}&longitude={coords.get('lon')}&current_weather=true&temperature_unit=celsius")
                     if response.status == 200:
                         json_response = await response.json()
                         weather_code = json_response.get('current_weather').get('weathercode')
