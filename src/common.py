@@ -55,7 +55,11 @@ def success(self, message, *args, **kws):
 
 logging.Logger.success = success
 
-logging.basicConfig(filename=log_file_path, level=logging.DEBUG)
+logging.basicConfig(
+    filename=log_file_path,
+    level=logging.DEBUG,
+    format='%(levelname)s:[%(asctime)s]: %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 try:
