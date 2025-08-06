@@ -22,7 +22,7 @@ async def main():
         try:
             # Load settings from settings.json
             settings = load_settings()
-            keyword = settings.get("keyword")
+            keyword = settings.get("keyword").lower()
             logger.info(f"Listening for keyword {keyword}")
 
             # Start displaying 'Listening'
