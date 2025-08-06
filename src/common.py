@@ -75,9 +75,6 @@ executor = ThreadPoolExecutor()
 
 # Initialize the speech recognition engine
 r = sr.Recognizer()
-logger.info("Microphones availables:")
-for index, name in enumerate(sr.Microphone.list_microphone_names()):
-    logger.info(f"Microphone {index}: {name}")
 
 # Initialize the LiteLLM API key
 with open("settings.json", "r") as f:
@@ -249,7 +246,9 @@ async def listen(display, state_task, stop_event):
                 
                 try:
                     audio = r.listen(source, timeout=2, phrase_time_limit=15)
+                    logger.debug(f"Audio captured, processing... {audio}")
                     text = r.recognize_google(audio)
+                    logger.debug(f"Audio to text: {text}")
                     
                     if text:  # If text is found, break the loop
                         state_task.cancel()

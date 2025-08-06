@@ -15,6 +15,8 @@ def refresh_api_key():
     if API_KEY == "" or API_KEY is None:
         logger.info("No OpenAI Key provided")
 
+logger.info(f"Initializing encoder, this may take time")
+
 try:
     encoder = HuggingFaceEncoder(model_name="all-MiniLM-L6-v2")
 except Exception as e:

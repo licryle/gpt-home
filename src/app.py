@@ -2,10 +2,10 @@ from common import *
 from routes import *
 
 async def main():
+    logger.info("Booting up")
+
     state_task = None
     semaphore = asyncio.Semaphore(10)  # Limit to 10 concurrent tasks
-
-    logger.info("Main function called")
 
     async def limited_task(task):
         async with semaphore:
