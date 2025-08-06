@@ -5,11 +5,6 @@ from semantic_router import Route
 
 from actions import *
 
-API_KEY = ""
-
-
-
-
 logger.info(f"Initializing encoder, this may take time")
 
 try:
