@@ -214,7 +214,7 @@ async def update_model(request: Request):
         
         with open("settings.json", "r") as f:
             settings = json.load(f)
-            litellm.api_key = settings["openai_api_key"] if settings["litellm_api_key"] == "" else settings["litellm_api_key"]
+            litellm.api_key = settings["litellm_api_key"]
         
         response = requests.get("https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json")
         model_list = response.json()
