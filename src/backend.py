@@ -26,6 +26,7 @@ import re
 ROOT_DIR = SOURCE_DIR.parent
 ENV_FILE_PATH = SOURCE_DIR / "frontend" / ".env"
 TOKEN_PATH = "spotify_token.json"
+LOGS_INITIAL_MAX_LINES = 100
 
 load_dotenv(ENV_FILE_PATH)
 
@@ -96,8 +97,10 @@ async def toggle_dark_mode(request: Request):
 def logs(request: Request):
     if log_file_path.exists() and log_file_path.is_file():
         with log_file_path.open("r") as f:
-            log_data = f.read()
-        return JSONResponse(content={"log_data": log_data.replace("`", "")})
+            lines = f.readlines()
+            last_lines = lines[-LOGS_INITIAL_MAX_LINES:]  # Get last X lines
+        cleaned_data = ''.join(last_lines).replace('`', '')
+        return JSONResponse(content={"log_data": cleaned_data})
     else:
         return Response(status_code=status.HTTP_404_NOT_FOUND, content="Log file not found")
     
