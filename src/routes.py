@@ -7,13 +7,8 @@ from actions import *
 
 API_KEY = ""
 
-def refresh_api_key():
-    with open("settings.json", "r") as f:
-        API_KEY = json.load(f)["openai_api_key"]
-    os.environ["OPENAI_API_KEY"] = API_KEY
 
-    if API_KEY == "" or API_KEY is None:
-        logger.info("No OpenAI Key provided")
+
 
 logger.info(f"Initializing encoder, this may take time")
 
@@ -136,8 +131,6 @@ class Action:
             return "Action failed due to an error."
 
 async def action_router(text: str, router=ActionRouter()):
-    logger.info("hello")
-    refresh_api_key()
     try:
         action_name = router.resolve(text)
         act = Action(action_name, text)

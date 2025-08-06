@@ -65,7 +65,7 @@ async def main():
                         if enable_heard:
                             delay_heard = await calculate_delay(heard_message)
 
-                        # Create a task for OpenAI query, don't await it yet
+                        # Create a task for Routing query, don't await it yet
                         query_task = asyncio.create_task(limited_task(action_router(actual_text)))
 
                         if enable_heard:
@@ -107,9 +107,9 @@ if __name__ == "__main__":
         display = await initialize_system()
 
         settings = load_settings()
-        api_key = settings.get("litellm_api_key") or settings.get("openai_api_key")
+        api_key = settings.get("litellm_api_key")
 
-        logger.info(f"Initialize system with API Key: {api_key}")
+        logger.info(f"Initialize system with LiteLLM API Key: {api_key}")
 
         if not api_key and display:
             display.fill(0)
@@ -126,7 +126,6 @@ if __name__ == "__main__":
         return display
 
     display = loop.run_until_complete(wrapped_initialize_system())
-    refresh_api_key()
 
     async def wrapped_main():
         await init_done_event.wait()  # Wait for the event to be set

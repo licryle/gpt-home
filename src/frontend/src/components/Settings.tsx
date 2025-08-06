@@ -149,35 +149,6 @@ const Settings: React.FC = () => {
 
         <div className="settings-container">
           
-          {/* API Keys */}
-          <div className="settings-section">
-            <div className="settings-section-header">API Keys</div>
-            <label>
-              <a href="https://platform.openai.com/settings/organization/api-keys" target="_blank" rel="noreferrer">
-                <i className="fas fa-circle-info"></i>
-              </a>
-              OpenAI<br /><span className="italic">Required for semantic routing</span><br />
-              <input
-                type="text"
-                value={settings.openai_api_key || ''}
-                onChange={(e) => setSettings({ ...settings, openai_api_key: e.target.value })}
-                style={{ width: '90%', paddingTop: '5px' }}
-              />
-            </label>
-            <br /><br />
-            <label>
-              <a href="https://docs.litellm.ai/docs/providers" target="_blank" rel="noreferrer">
-                <i className="fas fa-circle-info"></i>
-              </a>
-              LiteLLM<br /><span className="italic">Optional; for general responses</span><br />
-              <input
-                type="text"
-                value={settings.litellm_api_key || ''}
-                onChange={(e) => setSettings({ ...settings, litellm_api_key: e.target.value })}
-                style={{ width: '90%', paddingTop: '5px' }}
-              />
-            </label>
-          </div>
 
           {/* General Settings */}
           <div className="settings-section">
@@ -232,6 +203,18 @@ const Settings: React.FC = () => {
           <div className="settings-section">
             <div className="settings-section-header">LLM Settings</div>
             <div className="settings-group">
+              <label>
+                <a href="https://docs.litellm.ai/docs/providers" target="_blank" rel="noreferrer">
+                  <i className="fas fa-circle-info"></i>
+                </a>
+                LiteLLM API Key<br />
+                <input
+                  type="text"
+                  value={settings.litellm_api_key || ''}
+                  onChange={(e) => setSettings({ ...settings, litellm_api_key: e.target.value })}
+                  style={{ width: '90%', paddingTop: '5px' }}
+                />
+              </label>
               <label>
                 Model<br />
                 {availableModels.length > 0 ? (
