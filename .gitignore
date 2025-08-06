@@ -33,3 +33,4 @@ hashed_password.txt
 
 src/__pycache__
 src/settings.json
+src/routes/__pycache__

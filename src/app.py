@@ -1,5 +1,5 @@
 from common import *
-from routes import *
+from router import action_router
 
 async def main():
     logger.info("Booting up")
