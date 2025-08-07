@@ -245,6 +245,8 @@ async def display_state(state, display, stop_event):
 async def handle_error(message, state_task, display, speaker):
     if state_task: 
         state_task.cancel()
+    logger.critical(f"An error occurred: {message}\n{traceback.format_exc()}")
+    message = message[:500]
     delay = await calculate_delay(message)
     stop_event = asyncio.Event()
     lcd_task = asyncio.create_task(updateLCD(message, display, stop_event=stop_event, delay=delay))
