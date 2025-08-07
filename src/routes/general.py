@@ -53,7 +53,8 @@ class GeneralRoute(AssistantRoute):
                 logger.error(traceback.format_exc())
                 return f"The API key you provided for `{model}` is not valid. Double check the API key corresponds to the model/provider you are trying to call."
             except Exception as e:
-                logger.error(f"Error on try {i+1}: {e}")
+                logger.error(f"Error on try {i+1}")
+                logger.debug(f"Error on try {i+1}: {e}")
                 if i == retries - 1:  # If this was the last retry
-                    return f"Something went wrong after {retries} retries: {e}\n{traceback.format_exc()}"
+                    return f"Something went wrong after {retries} retries. Please try again."
             await asyncio.sleep(0.5)  # Wait before retrying
