@@ -69,19 +69,23 @@ class AudioAssistant:
         settings = load_settings()
         speech_engine = settings.get("speechEngine", "pyttsx3")
 
-        async with self.speak_lock:
-            def _speak():
-                if speech_engine == 'gtts':
-                    mp3_fp = BytesIO()
-                    tts = gTTS(text, lang='en')
-                    tts.write_to_fp(mp3_fp)
-                    mixer.init()
-                    mp3_fp.seek(0)
-                    mixer.music.load(mp3_fp, "mp3")
-                    mixer.music.play()
-                else:
-                    self.speech_engine.say(text)
-                    self.speech_engine.runAndWait()
+        try:
+            async with self.speak_lock:
+                def _speak():
+                    if speech_engine == 'gtts':
+                        mp3_fp = BytesIO()
+                        tts = gTTS(text, lang='en')
+                        tts.write_to_fp(mp3_fp)
+                        mixer.init()
+                        mp3_fp.seek(0)
+                        mixer.music.load(mp3_fp, "mp3")
+                        mixer.music.play()
+                    else:
+                        self.speech_engine.say(text)
+                        self.speech_engine.runAndWait()
 
-            await self.loop.run_in_executor(self.executor, _speak)
-            stop_event.set()
+                await self.loop.run_in_executor(self.executor, _speak)
+                stop_event.set()
+        except Exception as e:
+            logger.error(f"Couldn't TTS: {e}")
+            logger.debug(f"Couldn't TTS: {traceback.format_exc()}")
