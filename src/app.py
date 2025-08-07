@@ -40,7 +40,10 @@ class AssistantApp:
         await self._initialize()  # Wait for the event to be set
 
         self._isRunning = True
-        await self._speaker.speak("Hello, I'm ready to help you")
+
+        settings = load_settings()
+        keyword = settings.get("keyword").lower()
+        await self._speaker.speak(f"Hello, I'm ready to help you. Call me {keyword}.")
 
         while self._isRunning:
             await self._loop()
