@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 import time
 import os
 import re
+from text2digits import text2digits
 from threading import Timer
 from datetime import datetime, timedelta
 import subprocess
@@ -20,6 +21,9 @@ class AlarmRoute(AssistantRoute):
         ]
 
     async def handle(self, text, **kwargs):
+        converter = text2digits.Text2Digits()
+        text = converter.convert(text)
+
         set_match = re.search(
             r'\b(?:set|create|schedule|wake\s+me\s+up)\s+(?:an\s+)?alarm\b.*?\b(?:for|in|at)\s*(\d{1,2}:\d{2}|\d+\s*(?:minutes?|mins?|hours?|hrs?))\b' +
             r'|\bwake\s+me\s+up\b.*?\b(?:in|at)\s*(\d{1,2}:\d{2}|\d+\s*(?:minutes?|mins?|hours?|hrs?))\b',
