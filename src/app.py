@@ -21,20 +21,31 @@ class AssistantApp:
         self._isRunning = False
 
     def start(self):
-        loop = asyncio.get_event_loop()
-
-        try:
-            loop.run_until_complete(self._main())
-        finally:
-            pending = asyncio.all_tasks(loop=loop)
-            for task in pending:
-                task.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    loop.run_until_complete(task)
-            loop.close()
+        asyncio.run(self._run())
 
     def stop(self):
         self._isRunning = False
+
+    async def _run(self):
+        loop = asyncio.get_running_loop()
+        main_task = asyncio.create_task(self._main())
+
+        try:
+            await main_task
+        except (KeyboardInterrupt, asyncio.CancelledError):
+            logger.info("KeyboardInterrupt received, stopping the assistant...")
+            self.stop()
+            main_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await main_task
+        finally:
+            # Cancel all pending tasks except current one
+            pending = [task for task in asyncio.all_tasks(loop) if task is not asyncio.current_task(loop)]
+            for task in pending:
+                task.cancel()
+            for task in pending:
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
 
     async def _main(self):
         await self._initialize()  # Wait for the event to be set
@@ -47,7 +58,8 @@ class AssistantApp:
 
         while self._isRunning:
             await asyncio.sleep(1)
-
+            
+        await self._speaker.speak("Shutting down, goodbye!")
         self._clean()
 
     async def _initialize(self):
@@ -81,7 +93,7 @@ class AssistantApp:
         except Exception as e:
             logger.error(f"An error occurred: {e}")
             logger.debug(f"An error occurred: {traceback.format_exc()}")
-            self._speaker.speak(f"Couldn't start assistant. An error occurred: {e}")
+            await self._speaker.speak(f"Couldn't start assistant. An error occurred: {e}")
         logger.success("Listening for commands")
     
     def _clean(self):
@@ -113,7 +125,7 @@ class AssistantApp:
                     route = self._router.resolveRoute(actual_text)
 
                     # Create a task for Routing query, don't await it yet
-                    query_task = asyncio.create_task(self._limited_task(route.handle(text)))
+                    query_task = asyncio.create_task(self._limited_task(route.handle(actual_text)))
 
                     if enable_heard:
                         await asyncio.gather(
