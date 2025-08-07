@@ -71,13 +71,6 @@ with open("settings.json", "r") as f:
 
 display_lock = asyncio.Lock()
 
-def network_connected():
-    try:
-        response = requests.get("http://www.google.com", timeout=5)
-        return response.status_code == 200
-    except requests.RequestException:
-        return False
-
 # Manually draw a degree symbol °
 def degree_symbol(display, x, y, radius, color):
     for i in range(x-radius, x+radius+1):
@@ -134,19 +127,6 @@ def initLCD():
     except Exception as e:
         logger.debug(f"Failed to initialize display, skipping...\n Reason: {e}\n{traceback.format_exc()}")
         return None
-
-async def initialize_system():
-    display = initLCD()
-    stop_event_init = asyncio.Event()
-    state_task = asyncio.create_task(display_state("Connecting", display, stop_event_init))
-    while not network_connected():
-        await asyncio.sleep(1)
-        message = "Network not connected. Retrying..."
-        logger.info(message)
-    stop_event_init.set()  # Signal to stop the 'Connecting' display
-    state_task.cancel()  # Cancel the display task
-    display = initLCD()  # Reinitialize the display
-    return display
 
 def load_settings():
     settings_path = SOURCE_DIR / "settings.json"
@@ -253,4 +233,3 @@ async def handle_error(message, state_task, display, speaker):
     speak_task = asyncio.create_task(speaker.speak(message, stop_event))
     await speak_task
     lcd_task.cancel()
-    logger.critical(f"An error occurred: {message}\n{traceback.format_exc()}")

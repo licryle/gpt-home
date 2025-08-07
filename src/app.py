@@ -3,38 +3,67 @@ from audio import AudioAssistant
 from router import AssistantRouter
 import speech_recognition as sr
 
-async def main():
-    logger.info("Booting up")
 
-    logger.info(f"Initializing Audio")
-    speaker = AudioAssistant()
-    logger.success(f"Audio initialized successfully")
-    await speaker.speak("Booting up")
+class AssistantApp:
+    def __init__(self):
+        self._semaphore = asyncio.Semaphore(10)  # Limit to 10 concurrent tasks
+        self._state_task = None
+        self._speaker = None
+        self._router = None
+        self._display = None
+        self._isRunning = False
 
-    logger.info(f"Initializing Assistant Router, this may take a while...")
-    try:
-        router = AssistantRouter("all-MiniLM-L6-v2")
-    except Exception as e:
-        logger.error(f"Failed to initialize Assistant Router, Shutting down")
-        logger.debug(f"Failed to initialize Assistant Router, Shutting down: {e}")
-        return
-    logger.success("Assistant Router initialized successfully")
-    await speaker.speak("Hello, I'm ready to help you")
+    def start(self):
+        loop = asyncio.get_event_loop()
 
-    state_task = None
-    semaphore = asyncio.Semaphore(10)  # Limit to 10 concurrent tasks
-    async def limited_task(task):
-        async with semaphore:
-            return await task
-
-    async def safe_task(task):
         try:
-            await task
-        except Exception as e:
-            logger.error(f"Task failed")
-            logger.debug(f"Task failed: {e}")
+            loop.run_until_complete(self._main())
+        finally:
+            pending = asyncio.all_tasks(loop=loop)
+            for task in pending:
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    loop.run_until_complete(task)
+            loop.close()
 
-    while True:
+    def stop(self):
+        self._isRunning = False
+
+    async def _main(self):
+        await self._initialize()  # Wait for the event to be set
+
+        self._isRunning = True
+        await self._speaker.speak("Hello, I'm ready to help you")
+
+        while self._isRunning:
+            await self._loop()
+
+    async def _initialize(self):
+        logger.info("Initializing Display")
+        self._display = initLCD()
+        if not self._display:
+            logger.error("No Display found")
+        else:
+            logger.success("Display initialized successfully")
+
+        logger.info(f"Initializing Audio")
+        self._speaker = AudioAssistant()
+        logger.success(f"Audio initialized successfully")
+        await self._speaker.speak("Booting up")
+
+        logger.info(f"Initializing Assistant Router, this may take a while...")
+        try:
+            self._router = AssistantRouter("all-MiniLM-L6-v2")
+        except Exception as e:
+            logger.error(f"Failed to initialize Assistant Router, Shutting down")
+            logger.debug(f"Failed to initialize Assistant Router, Shutting down: {e}")
+            return
+        logger.success("Assistant Router initialized successfully")
+
+        await self._check_network()
+        self._check_api_key()
+    
+    async def _loop(self):
         try:
             # Load settings from settings.json
             settings = load_settings()
@@ -43,18 +72,18 @@ async def main():
 
             # Start displaying 'Listening'
             stop_event = asyncio.Event()
-            state_task = asyncio.create_task(display_state("Listening", display, stop_event))
+            state_task = asyncio.create_task(display_state("Listening", self._display, stop_event))
 
             text = None
             try:
-                text = await speaker.listen(state_task, stop_event)
+                text = await self._speaker.listen(state_task, stop_event)
             except OSError as e:
                 logger.error("Microphone not initialized or not available. Sleeping 2 seconds.")
                 await asyncio.sleep(2)
             except Exception as e:
                 logger.error(f"Listening failed")
                 logger.debug(f"Listening failed: {traceback.format_exc()}")
-                continue
+                return
 
             # Stop displaying 'Listening'
             stop_event.set()
@@ -83,15 +112,15 @@ async def main():
 
                         # Resolve the route for the actual text
                         logger.info(f"Resolving route for: {actual_text}")
-                        route = router.resolveRoute(actual_text)
+                        route = self._router.resolveRoute(actual_text)
 
                         # Create a task for Routing query, don't await it yet
-                        query_task = asyncio.create_task(limited_task(route.handle(text)))
+                        query_task = asyncio.create_task(self._limited_task(route.handle(text)))
 
                         if enable_heard:
                             await asyncio.gather(
-                                limited_task(safe_task(speaker.speak("I'm on it", stop_event_heard))),
-                                limited_task(safe_task(updateLCD(heard_message, display, stop_event=stop_event_heard, delay=delay_heard)))
+                                self._limited_task(self._safe_task(self._speaker.speak("I'm on it", stop_event_heard))),
+                                self._limited_task(self._safe_task(updateLCD(heard_message, self._display, stop_event=stop_event_heard, delay=delay_heard)))
                             )
 
                         response_message = await query_task
@@ -99,64 +128,73 @@ async def main():
                         # Calculate time to speak and display
                         delay_response = await calculate_delay(response_message)
 
-                        response_task_speak = asyncio.create_task(limited_task(safe_task(speaker.speak(response_message, stop_event_response))))
-                        response_task_lcd = asyncio.create_task(limited_task(safe_task(updateLCD(response_message, display, stop_event=stop_event_response, delay=delay_response))))
+                        response_task_speak = asyncio.create_task(self._limited_task(self._safe_task(self._speaker.speak(response_message, stop_event_response))))
+                        response_task_lcd = asyncio.create_task(self._limited_task(self._safe_task(updateLCD(response_message, self._display, stop_event=stop_event_response, delay=delay_response))))
 
                         logger.success(response_message)
                         await asyncio.gather(response_task_speak, response_task_lcd)
                         
                 else:
-                    continue  # Skip to the next iteration
+                    return  # Skip to the next iteration
             else:
-                continue  # Skip to the next iteration
+                return  # Skip to the next iteration
         except sr.UnknownValueError: # TODO move as it's only related to listening
             pass
         except sr.RequestError as e:
             error_message = f"Could not request results; {e}"
-            await handle_error(error_message, state_task, display, speaker)
+            await handle_error(error_message, state_task, self._display, self._speaker)
         except Exception as e:
             error_message = f"Something Went Wrong: {e}"
-            await handle_error(error_message, state_task, display, speaker)
+            await handle_error(error_message, state_task, self._display, self._speaker)
 
-if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-    init_done_event = asyncio.Event()
+    async def _limited_task(self, task):
+        async with self._semaphore:
+            return await task
 
-    async def wrapped_initialize_system():
-        global display
-        display = await initialize_system()
-
+    async def _safe_task(self, task):
+        try:
+            await task
+        except Exception as e:
+            logger.error(f"Task failed")
+            logger.debug(f"Task failed: {e}")
+    def _check_api_key(self):
         settings = load_settings()
         api_key = settings.get("litellm_api_key")
 
         logger.info(f"Initialize system with LiteLLM API Key: {api_key}")
 
-        if not api_key and display:
-            display.fill(0)
+        if not api_key and self._display:
+            self._display.fill(0)
             ip_address = subprocess.check_output(["hostname", "-I"]).decode("utf-8").split(" ")[0].strip()
-            display.text("Missing API Key", 0, 0, 1)
-            display.text("To update it, visit:", 0, 10, 1)
+            self._display.text("Missing API Key", 0, 0, 1)
+            self._display.text("To update it, visit:", 0, 10, 1)
             if ip_address:
-                display.text(f"{ip_address}/settings", 0, 20, 1)
+                self._display.text(f"{ip_address}/settings", 0, 20, 1)
             else:
-                display.text("gpt-home.local/settings", 0, 20, 1)
-            display.show()
+                self._display.text("gpt-home.local/settings", 0, 20, 1)
+            self._display.show()
 
-        init_done_event.set()
-        return display
+    async def _check_network(self):
+        stop_event_init = asyncio.Event()
+        state_task = asyncio.create_task(display_state("Connecting", self._display, stop_event_init))
 
-    display = loop.run_until_complete(wrapped_initialize_system())
+        while not AssistantApp._is_network_connected():
+            await asyncio.sleep(10)
+            message = "Network not connected. Retrying in 10 seconds..."
+            logger.error(message)
+            await self._speaker.speak(message)
 
-    async def wrapped_main():
-        await init_done_event.wait()  # Wait for the event to be set
-        await main()
+        stop_event_init.set()  # Signal to stop the 'Connecting' display
+        state_task.cancel()  # Cancel the display task
 
-    try:
-        loop.run_until_complete(wrapped_main())
-    finally:
-        pending = asyncio.all_tasks(loop=loop)
-        for task in pending:
-            task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                loop.run_until_complete(task)
-        loop.close()
+    @staticmethod
+    def _is_network_connected():
+        try:
+            response = requests.get("http://www.google.com", timeout=5)
+            return response.status_code == 200
+        except requests.RequestException:
+            return False
+
+if __name__ == "__main__":
+    logger.info("Starting Assistant App")
+    AssistantApp().start()
