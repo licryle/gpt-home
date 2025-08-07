@@ -46,7 +46,9 @@ class AssistantApp:
         await self._speaker.speak(f"Hello, I'm ready to help you. Call me {keyword}.")
 
         while self._isRunning:
-            await self._loop()
+            await asyncio.sleep(1)
+
+        self._clean()
 
     async def _initialize(self):
         logger.info("Initializing Display")
@@ -73,6 +75,63 @@ class AssistantApp:
 
         await self._check_network()
         self._check_api_key()
+
+        try:
+            self._speaker.start_listening(self._on_heard_sentence)
+        except Exception as e:
+            logger.error(f"An error occurred: {e}")
+            logger.debug(f"An error occurred: {traceback.format_exc()}")
+            self._speaker.speak(f"Couldn't start assistant. An error occurred: {e}")
+        logger.success("Listening for commands")
+    
+    def _clean(self):
+        self._speaker.stop_listening()
+    
+    def _on_heard_sentence(self, text):
+        asyncio.run(self._process_text(text))
+
+    async def _process_text(self, text):
+        logger.debug(f"Heard sentence: {text}")
+        # Load settings from settings.json
+        settings = load_settings()
+        keyword = settings.get("keyword").lower()
+        
+        # Check if keyword is in text and respond
+        if text:
+            clean_text = text.lower().translate(str.maketrans('', '', string.punctuation))
+            if keyword in clean_text:
+                enable_heard = settings.get("sayHeard", True) == True
+                actual_text = clean_text.split(keyword, 1)[1].strip()
+                if actual_text:
+                    heard_message = f"Heard: \"{actual_text}\""
+                    logger.success(heard_message)
+                    stop_event_heard = asyncio.Event()
+                    stop_event_response = asyncio.Event()
+
+                    # Resolve the route for the actual text
+                    logger.info(f"Resolving route for: {actual_text}")
+                    route = self._router.resolveRoute(actual_text)
+
+                    # Create a task for Routing query, don't await it yet
+                    query_task = asyncio.create_task(self._limited_task(route.handle(text)))
+
+                    if enable_heard:
+                        await asyncio.gather(
+                            self._limited_task(self._safe_task(self._speaker.speak("I'm on it", stop_event_heard))),
+                            self._limited_task(self._safe_task(self._display.updateLCD(heard_message, stop_event=stop_event_heard)))
+                        )
+
+                    response_message = await query_task
+                    
+                    # speak and display answer
+                    response_task_speak = asyncio.create_task(self._limited_task(self._safe_task(self._speaker.speak(response_message, stop_event_response))))
+                    response_task_lcd = asyncio.create_task(self._limited_task(self._safe_task(self._display.updateLCD(response_message, stop_event=stop_event_response))))
+
+                    logger.success(response_message)
+                    await asyncio.gather(response_task_speak, response_task_lcd)
+            else:
+                return  # Skip to the next iteration
+
     
     async def _loop(self):
         try:
@@ -162,6 +221,7 @@ class AssistantApp:
         except Exception as e:
             logger.error(f"Task failed")
             logger.debug(f"Task failed: {e}")
+
     def _check_api_key(self):
         settings = load_settings()
         api_key = settings.get("litellm_api_key")

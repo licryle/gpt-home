@@ -17,55 +17,53 @@ class AudioAssistant:
         self.speech_engine.setProperty('rate', 150)  # Set speech rate
         self.speech_engine.setProperty('volume', 1)  # Set volume level (0.0 to 1.0)
         self.speech_engine.setProperty('alsa_device', 'hw:Headphones,0')
+        self._listening_task = None
+        self._listening_callback = None
 
         self.speak_lock = asyncio.Lock()
         self.executor = ThreadPoolExecutor()
 
         # Initialize the speech recognition engine
         self.speech_recognition = sr.Recognizer()
+        self.speech_recognition.energy_threshold = 4000  # tweak depending on mic
+        self.speech_recognition.dynamic_energy_threshold = True
+        self.speech_recognition.pause_threshold = 0.5  # Adjust pause threshold for better recognition
+        self.speech_recognition.non_speaking_duration = 0.5  # Adjust non-speaking duration for better recognition
         self.loop = asyncio.get_event_loop()
     
-    def recognize_audio(self, loop, state_task, stop_event):
-        try:
-            with sr.Microphone() as source:
-                if source.stream is None:
-                    logger.debug("Microphone not initialized.")
-                    raise OSError("Microphone not initialized.")
-                
-                listening = False  # Initialize variable for feedback
-                
-                try:
-                    audio = self.speech_recognition.listen(source, timeout=2, phrase_time_limit=15)
-                    logger.debug(f"Audio captured, processing... {audio}")
-                    text = self.speech_recognition.recognize_google(audio)
-                    logger.debug(f"Audio to text: {text}")
-                    
-                    if text:  # If text is found, break the loop
-                        state_task.cancel()
-                        return text
-                        
-                except sr.WaitTimeoutError:
-                    if listening:
-                        logger.info("Still listening but timed out, waiting for phrase...")
-                    else:
-                        logger.info("Timed out, waiting for phrase to start...")
-                        listening = True
-                        
-                except sr.UnknownValueError:
-                    logger.info("Could not understand audio, waiting for a new phrase...")
-                    listening = False
-                        
-        except sr.WaitTimeoutError:
-            if source and source.stream:
-                source.stream.close()
-            raise asyncio.TimeoutError("Listening timed out.")
-        except OSError as e:
-            logger.debug(f"Microphone not available: {e}")
-            raise OSError("Microphone not available.")
+    def _recognize_audio(self, recognizer, audio):
+        text = None
 
-    async def listen(self, state_task, stop_event):
-        text = await self.loop.run_in_executor(self.executor, self.recognize_audio, self.loop, state_task, stop_event)
-        return text
+        try:
+            logger.debug(f"Audio captured, processing... {audio}")
+            text = self.speech_recognition.recognize_google(audio)
+            logger.debug(f"Audio to text: {text}")
+        except sr.UnknownValueError:
+            logger.info("Could not understand audio, waiting for a new phrase...")
+        except Exception as e:
+            logger.info("The audio to text server couldn't be contacted")
+            logger.debug(f"The audio to text server couldn't be contacted: {e}")
+            text = "The audio to text server couldn't be contacted"
+
+        if text is not None:
+            self._listening_callback(text)
+
+    def start_listening(self, callback):
+        self._listening_callback = callback
+        logger.debug("start_listening")
+
+        if (self._listening_task is None):
+            with sr.Microphone() as source:
+                logger.debug("adjust ambient noise")
+                self.speech_recognition.adjust_for_ambient_noise(source, duration=1)
+
+            logger.debug("start background listening")
+            self._listening_task = self.speech_recognition.listen_in_background(sr.Microphone(), self._recognize_audio)
+    
+    def stop_listening(self):
+        if (self._listening_task is not None):
+            self._listening_task(wait_for_stop=False)
+            self._listening_task = None
 
     async def speak(self, text, stop_event=asyncio.Event()):
         settings = load_settings()
