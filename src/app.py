@@ -2,10 +2,9 @@ import asyncio
 import contextlib
 import requests
 import string
-import subprocess
 import traceback
 
-from common import *
+from config import load_settings, logger
 from audio import AudioAssistant
 from display import LCDScreen
 from router import AssistantRouter

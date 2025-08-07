@@ -1,5 +1,5 @@
 import logging
-from common import logger
+from config import logger
 
 from routes import routes_dict, GeneralRoute # import all routes from the package
 

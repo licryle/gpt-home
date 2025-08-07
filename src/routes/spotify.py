@@ -3,7 +3,7 @@ import os
 import subprocess
 import traceback
 
-from common import logger
+from config import logger
 
 from .base import AssistantRoute
 

@@ -5,7 +5,7 @@ import re
 import traceback
 
 from weather_codes import weather_codes
-from common import logger, load_settings
+from config import logger, load_settings
 
 from .base import AssistantRoute
 from .general import GeneralRoute

@@ -8,7 +8,7 @@ from gtts import gTTS
 from io import BytesIO
 from pygame import mixer
 
-from common import load_settings, logger
+from config import load_settings, logger
 
 
 class AudioAssistant:

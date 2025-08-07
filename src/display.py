@@ -6,7 +6,7 @@ import subprocess
 import textwrap
 import traceback
 
-from common import logger
+from config import logger
 
 try:
     from board import SCL, SDA
