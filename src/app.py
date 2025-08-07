@@ -133,7 +133,12 @@ class AssistantApp:
                             self._limited_task(self._safe_task(self._display.updateLCD(heard_message, stop_event=stop_event_heard)))
                         )
 
-                    response_message = await query_task
+                    try:
+                        response_message = await query_task
+                    except Exception as e:
+                        logger.error(f"An error occurred while processing the command: {e}")
+                        logger.debug(f"An error occurred while processing the command: {traceback.format_exc()}")
+                        response_message = f"An error occurred in the {route.__class__.__name__} module"
                     
                     # speak and display answer
                     response_task_speak = asyncio.create_task(self._limited_task(self._safe_task(self._speaker.speak(response_message, stop_event_response))))
