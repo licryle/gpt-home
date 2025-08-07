@@ -1,11 +1,19 @@
 from common import *
-from router import action_router
+from router import AssistantRouter
 
 async def main():
     logger.info("Booting up")
 
     state_task = None
     semaphore = asyncio.Semaphore(10)  # Limit to 10 concurrent tasks
+
+    logger.info(f"Initializing Assistant Router, this may take a while...")
+    try:
+        router = AssistantRouter("all-MiniLM-L6-v2")
+    except Exception as e:
+        logger.error(f"Failed to initialize Assistant Router, Shutting down")
+        logger.debug(f"Failed to initialize Assistant Router, Shutting down: {e}")
+        return
 
     async def limited_task(task):
         async with semaphore:
@@ -65,8 +73,12 @@ async def main():
                         if enable_heard:
                             delay_heard = await calculate_delay(heard_message)
 
+                        # Resolve the route for the actual text
+                        logger.info(f"Resolving route for: {actual_text}")
+                        route = router.resolveRoute(actual_text)
+
                         # Create a task for Routing query, don't await it yet
-                        query_task = asyncio.create_task(limited_task(action_router(actual_text)))
+                        query_task = asyncio.create_task(limited_task(route.handle(text)))
 
                         if enable_heard:
                             await asyncio.gather(

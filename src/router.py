@@ -1,85 +1,70 @@
 import logging
-from routes import routes_dict, route_classes, GeneralRoute # import all routes from the package
-
 from common import logger
+
+from routes import routes_dict, GeneralRoute # import all routes from the package
 
 from semantic_router.layer import RouteLayer
 import semantic_router.encoders as encoders
 from semantic_router.encoders import HuggingFaceEncoder
 
-logger.info(f"Initializing encoder, this may take time")
+class Router:
+    encoder = None
+    route_layer = None
+    routes_dict = None
 
-try:
-    encoder = HuggingFaceEncoder(model_name="all-MiniLM-L6-v2")
-except Exception as e:
-    logger.debug(f"Error initializing encoder: {e}")
+    def __init__(self, encoderModelName, routes_dict):
+        self.routes_dict = routes_dict
 
-logger.info(f"Encoder: {encoder}")
-if encoder is not None:
-    logger.info("Encoder initialized")
-else:
-    logger.error("Encoder not initialized")
+        # Initialize the encoder
+        self._initEncoder(encoderModelName)
+        
+        # Initialize RouteLayer with the encoder and routes
+        available_routes = [r.route() for c, r in routes_dict.items()]
+        logger.debug(f"Routes available: {available_routes}")
 
+        print(self.encoder)
+        self.route_layer = RouteLayer(encoder=self.encoder, routes=available_routes)
 
+    def _initEncoder(self, encoderModelName):
+        # Init encoderLogging
+        def my_log_handler(record):
+            # This function will be called on every log record
+            if record.levelno >= logging.ERROR and "Exception occurred" in record.getMessage():
+                logger.error("Caught semantic-router exception log:", record.getMessage())
+                # You could raise, store, or handle the error here
+                # Optionally, return False to prevent further propagation
 
-# Initialize RouteLayer with the encoder and routes
-rl = RouteLayer(encoder=encoder, routes=routes_dict)
+        class CustomHandler(logging.Handler):
+            def emit(self, record):
+                my_log_handler(record)
 
-class ActionRouter:
-    def __init__(self):
-        self.route_layer = rl
+        sem_logger = logging.getLogger("semantic_router.utils.logger")
+        sem_logger.addHandler(CustomHandler())
+        sem_logger.setLevel(logging.ERROR)
 
-    def resolve(self, text):
-        logger.info(f"Resolving text: {text}")
+        # Load and Init Encoder
+        self.encoder = HuggingFaceEncoder(model_name=encoderModelName)
+
+    def isReady(self):
+        return self.encoder is not None and self.route_layer is not None
+    
+    def resolveRoute(self, text):
+        if not self.isReady():
+            raise ValueError("Router is not ready. Encoder or route layer is not initialized.")
+
         try:
-            result = self.route_layer(text)
-            action_name = result.name if result else "llm_action"
-            logger.info(f"Resolved action: {action_name}")
-            return action_name
+            r = self.route_layer(text)
+            if r is None:
+                raise ValueError("No route found for the given text.")
+    
+            logger.info(f"Resolved route: {r}, {self.routes_dict[r.name]}")
+            
         except Exception as e:
-            logger.error(f"Error resolving text: {e}")
-            return "llm_action"
+            logger.error(f"Error resolving text, defaulting to GenericLLM: {e}")
+            return GeneralRoute()
 
-class Action:
-    def __init__(self, action_name, text):
-        self.action_name = action_name
-        self.text = text
+        return self.routes_dict[r.name]()
 
-    async def perform(self, **kwargs):
-        try:
-            assistantRoute = route_classes[self.action_name]()
-            logger.info(f"Performing action: {self.action_name} with text: {self.text}")
-            return await assistantRoute.handle(self.text, **kwargs)
-        except KeyError:
-            logger.warning(f"Action {self.action_name} not found. Falling back to llm_action.")
-            assistantRoute = GeneralRoute()
-            return await assistantRoute.handle(self.text, **kwargs)
-        except Exception as e:
-            logger.error(f"Error performing action {self.action_name}: {e}")
-            return "Action failed due to an error."
-
-async def action_router(text: str, router=ActionRouter()):
-    try:
-        action_name = router.resolve(text)
-        act = Action(action_name, text)
-        return await act.perform()
-    except Exception as e:
-        logger.error(f"Error in action_router: {e}")
-        return "Action routing failed due to an error."
-
-
-
-def my_log_handler(record):
-    # This function will be called on every log record
-    if record.levelno >= logging.ERROR and "Exception occurred" in record.getMessage():
-        logger.error("Caught semantic-router exception log:", record.getMessage())
-        # You could raise, store, or handle the error here
-    # Optionally, return False to prevent further propagation
-
-class CustomHandler(logging.Handler):
-    def emit(self, record):
-        my_log_handler(record)
-
-sem_logger = logging.getLogger("semantic_router.utils.logger")
-sem_logger.addHandler(CustomHandler())
-sem_logger.setLevel(logging.ERROR)
+class AssistantRouter(Router):
+    def __init__(self, encoderModelName):
+        super().__init__(encoderModelName, routes_dict)
