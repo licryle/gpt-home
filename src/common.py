@@ -1,13 +1,11 @@
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 from requests.packages.urllib3.util.retry import Retry
-from concurrent.futures import ThreadPoolExecutor
 from requests.adapters import HTTPAdapter
 from datetime import datetime, timedelta
 from litellm import completion, check_valid_key
 from requests.sessions import Session
 from caldav.elements import dav, cdav
 from dotenv.main import set_key
-import speech_recognition as sr
 from asyncio import create_task
 from dotenv import load_dotenv
 from threading import Timer
@@ -21,7 +19,6 @@ import requests
 import litellm
 import logging
 import asyncio
-import pyttsx3
 import aiohttp
 import caldav
 import base64
@@ -33,11 +30,6 @@ import time
 import os
 import re
 
-# TTS
-from gtts import gTTS
-from io import BytesIO
-from pygame import mixer
-import time
 
 SOURCE_DIR = Path(__file__).parent
 log_file_path = SOURCE_DIR / "events.log"
@@ -71,24 +63,12 @@ try:
 except Exception as e:
     logger.debug(f"Failed to import adafruit_ssd1306. Skipping...\n    Reason: {e}\n{traceback.format_exc()}")
 
-executor = ThreadPoolExecutor()
-
-# Initialize the speech recognition engine
-r = sr.Recognizer()
 
 # Initialize the LiteLLM API key
 with open("settings.json", "r") as f:
     settings = json.load(f)
     litellm.api_key = settings["litellm_api_key"]
 
-# Initialize the text-to-speech engine
-engine = pyttsx3.init()
-# Set properties
-engine.setProperty('rate', 145)
-engine.setProperty('volume', 1.0)
-# Direct audio to specific hardware
-engine.setProperty('alsa_device', 'hw:Headphones,0')
-speak_lock = asyncio.Lock()
 display_lock = asyncio.Lock()
 
 def network_connected():
@@ -232,50 +212,7 @@ async def updateLCD(text, display, stop_event=None, delay=0.02):
         line_count = len(lines)
         display_task = asyncio.create_task(display_text(delay))
 
-async def listen(display, state_task, stop_event):
-    loop = asyncio.get_running_loop()
 
-    def recognize_audio(loop, state_task, stop_event):
-        try:
-            with sr.Microphone() as source:
-                if source.stream is None:
-                    logger.debug("Microphone not initialized.")
-                    raise OSError("Microphone not initialized.")
-                
-                listening = False  # Initialize variable for feedback
-                
-                try:
-                    audio = r.listen(source, timeout=2, phrase_time_limit=15)
-                    logger.debug(f"Audio captured, processing... {audio}")
-                    text = r.recognize_google(audio)
-                    logger.debug(f"Audio to text: {text}")
-                    
-                    if text:  # If text is found, break the loop
-                        state_task.cancel()
-                        return text
-                        
-                except sr.WaitTimeoutError:
-                    if listening:
-                        logger.info("Still listening but timed out, waiting for phrase...")
-                    else:
-                        logger.info("Timed out, waiting for phrase to start...")
-                        listening = True
-                        
-                except sr.UnknownValueError:
-                    logger.info("Could not understand audio, waiting for a new phrase...")
-                    listening = False
-                        
-        except sr.WaitTimeoutError:
-            if source and source.stream:
-                source.stream.close()
-            raise asyncio.TimeoutError("Listening timed out.")
-        except OSError as e:
-            logger.debug(f"Microphone not available: {e}")
-            raise OSError("Microphone not available.")
-
-
-    text = await loop.run_in_executor(executor, recognize_audio, loop, state_task, stop_event)
-    return text
 
 async def display_state(state, display, stop_event):
     if display is None:
@@ -305,33 +242,13 @@ async def display_state(state, display, stop_event):
                 display.show()
                 await asyncio.sleep(0.5)
 
-async def speak(text, stop_event=asyncio.Event()):
-    settings = load_settings()
-    speech_engine = settings.get("speechEngine", "pyttsx3")
-    async with speak_lock:
-        loop = asyncio.get_running_loop()
-        def _speak():
-            if speech_engine == 'gtts':
-                mp3_fp = BytesIO()
-                tts = gTTS(text, lang='en')
-                tts.write_to_fp(mp3_fp)
-                mixer.init()
-                mp3_fp.seek(0)
-                mixer.music.load(mp3_fp, "mp3")
-                mixer.music.play()
-            else:
-                engine.say(text)
-                engine.runAndWait()
-        await loop.run_in_executor(executor, _speak)
-        stop_event.set()
-
-async def handle_error(message, state_task, display):
+async def handle_error(message, state_task, display, speaker):
     if state_task: 
         state_task.cancel()
     delay = await calculate_delay(message)
     stop_event = asyncio.Event()
     lcd_task = asyncio.create_task(updateLCD(message, display, stop_event=stop_event, delay=delay))
-    speak_task = asyncio.create_task(speak(message, stop_event))
+    speak_task = asyncio.create_task(speaker.speak(message, stop_event))
     await speak_task
     lcd_task.cancel()
     logger.critical(f"An error occurred: {message}\n{traceback.format_exc()}")

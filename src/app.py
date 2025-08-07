@@ -1,11 +1,15 @@
 from common import *
+from audio import AudioAssistant
 from router import AssistantRouter
+import speech_recognition as sr
 
 async def main():
     logger.info("Booting up")
 
-    state_task = None
-    semaphore = asyncio.Semaphore(10)  # Limit to 10 concurrent tasks
+    logger.info(f"Initializing Audio")
+    speaker = AudioAssistant()
+    logger.success(f"Audio initialized successfully")
+    await speaker.speak("Booting up")
 
     logger.info(f"Initializing Assistant Router, this may take a while...")
     try:
@@ -14,7 +18,11 @@ async def main():
         logger.error(f"Failed to initialize Assistant Router, Shutting down")
         logger.debug(f"Failed to initialize Assistant Router, Shutting down: {e}")
         return
+    logger.success("Assistant Router initialized successfully")
+    await speaker.speak("Hello, I'm ready to help you")
 
+    state_task = None
+    semaphore = asyncio.Semaphore(10)  # Limit to 10 concurrent tasks
     async def limited_task(task):
         async with semaphore:
             return await task
@@ -39,7 +47,7 @@ async def main():
 
             text = None
             try:
-                text = await listen(display, state_task, stop_event)
+                text = await speaker.listen(state_task, stop_event)
             except OSError as e:
                 logger.error("Microphone not initialized or not available. Sleeping 2 seconds.")
                 await asyncio.sleep(2)
@@ -82,7 +90,7 @@ async def main():
 
                         if enable_heard:
                             await asyncio.gather(
-                                limited_task(safe_task(speak(heard_message, stop_event_heard))),
+                                limited_task(safe_task(speaker.speak("I'm on it", stop_event_heard))),
                                 limited_task(safe_task(updateLCD(heard_message, display, stop_event=stop_event_heard, delay=delay_heard)))
                             )
 
@@ -91,7 +99,7 @@ async def main():
                         # Calculate time to speak and display
                         delay_response = await calculate_delay(response_message)
 
-                        response_task_speak = asyncio.create_task(limited_task(safe_task(speak(response_message, stop_event_response))))
+                        response_task_speak = asyncio.create_task(limited_task(safe_task(speaker.speak(response_message, stop_event_response))))
                         response_task_lcd = asyncio.create_task(limited_task(safe_task(updateLCD(response_message, display, stop_event=stop_event_response, delay=delay_response))))
 
                         logger.success(response_message)
@@ -101,14 +109,14 @@ async def main():
                     continue  # Skip to the next iteration
             else:
                 continue  # Skip to the next iteration
-        except sr.UnknownValueError:
+        except sr.UnknownValueError: # TODO move as it's only related to listening
             pass
         except sr.RequestError as e:
             error_message = f"Could not request results; {e}"
-            await handle_error(error_message, state_task, display)
+            await handle_error(error_message, state_task, display, speaker)
         except Exception as e:
             error_message = f"Something Went Wrong: {e}"
-            await handle_error(error_message, state_task, display)
+            await handle_error(error_message, state_task, display, speaker)
 
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
