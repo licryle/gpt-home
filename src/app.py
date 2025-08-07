@@ -1,5 +1,13 @@
+import asyncio
+import contextlib
+import requests
+import string
+import subprocess
+import traceback
+
 from common import *
 from audio import AudioAssistant
+from display import LCDScreen
 from router import AssistantRouter
 import speech_recognition as sr
 
@@ -40,11 +48,12 @@ class AssistantApp:
 
     async def _initialize(self):
         logger.info("Initializing Display")
-        self._display = initLCD()
-        if not self._display:
-            logger.error("No Display found")
-        else:
+        self._display = LCDScreen()
+        if self._display.is_available():
             logger.success("Display initialized successfully")
+            self._limited_task(self._safe_task(self._display.updateLCD("Booting up")))
+        else:
+            logger.error("No Display found")
 
         logger.info(f"Initializing Audio")
         self._speaker = AudioAssistant()
@@ -72,7 +81,7 @@ class AssistantApp:
 
             # Start displaying 'Listening'
             stop_event = asyncio.Event()
-            state_task = asyncio.create_task(display_state("Listening", self._display, stop_event))
+            state_task = asyncio.create_task(self._display.display_state("Listening", stop_event))
 
             text = None
             try:
@@ -106,10 +115,6 @@ class AssistantApp:
                         stop_event_heard = asyncio.Event()
                         stop_event_response = asyncio.Event()
 
-                        # Calculate time to speak and display
-                        if enable_heard:
-                            delay_heard = await calculate_delay(heard_message)
-
                         # Resolve the route for the actual text
                         logger.info(f"Resolving route for: {actual_text}")
                         route = self._router.resolveRoute(actual_text)
@@ -120,16 +125,14 @@ class AssistantApp:
                         if enable_heard:
                             await asyncio.gather(
                                 self._limited_task(self._safe_task(self._speaker.speak("I'm on it", stop_event_heard))),
-                                self._limited_task(self._safe_task(updateLCD(heard_message, self._display, stop_event=stop_event_heard, delay=delay_heard)))
+                                self._limited_task(self._safe_task(self._display.updateLCD(heard_message, stop_event=stop_event_heard)))
                             )
 
                         response_message = await query_task
                         
                         # Calculate time to speak and display
-                        delay_response = await calculate_delay(response_message)
-
                         response_task_speak = asyncio.create_task(self._limited_task(self._safe_task(self._speaker.speak(response_message, stop_event_response))))
-                        response_task_lcd = asyncio.create_task(self._limited_task(self._safe_task(updateLCD(response_message, self._display, stop_event=stop_event_response, delay=delay_response))))
+                        response_task_lcd = asyncio.create_task(self._limited_task(self._safe_task(self._display.updateLCD(response_message, stop_event=stop_event_response))))
 
                         logger.success(response_message)
                         await asyncio.gather(response_task_speak, response_task_lcd)
@@ -142,10 +145,10 @@ class AssistantApp:
             pass
         except sr.RequestError as e:
             error_message = f"Could not request results; {e}"
-            await handle_error(error_message, state_task, self._display, self._speaker)
+            await self._handle_error(error_message, state_task)
         except Exception as e:
             error_message = f"Something Went Wrong: {e}"
-            await handle_error(error_message, state_task, self._display, self._speaker)
+            await self._handle_error(error_message, state_task)
 
     async def _limited_task(self, task):
         async with self._semaphore:
@@ -163,20 +166,12 @@ class AssistantApp:
 
         logger.info(f"Initialize system with LiteLLM API Key: {api_key}")
 
-        if not api_key and self._display:
-            self._display.fill(0)
-            ip_address = subprocess.check_output(["hostname", "-I"]).decode("utf-8").split(" ")[0].strip()
-            self._display.text("Missing API Key", 0, 0, 1)
-            self._display.text("To update it, visit:", 0, 10, 1)
-            if ip_address:
-                self._display.text(f"{ip_address}/settings", 0, 20, 1)
-            else:
-                self._display.text("gpt-home.local/settings", 0, 20, 1)
-            self._display.show()
+        if not api_key and self._display._is_available():
+            self._display.display_no_api_key()
 
     async def _check_network(self):
         stop_event_init = asyncio.Event()
-        state_task = asyncio.create_task(display_state("Connecting", self._display, stop_event_init))
+        state_task = asyncio.create_task(self._display.display_state("Connecting", stop_event_init))
 
         while not AssistantApp._is_network_connected():
             await asyncio.sleep(10)
@@ -186,6 +181,17 @@ class AssistantApp:
 
         stop_event_init.set()  # Signal to stop the 'Connecting' display
         state_task.cancel()  # Cancel the display task
+
+    async def _handle_error(self, message, state_task):
+        if state_task: 
+            state_task.cancel()
+        logger.critical(f"An error occurred: {message}\n{traceback.format_exc()}")
+        message = message[:500]
+        stop_event = asyncio.Event()
+        lcd_task = asyncio.create_task(self._display.updateLCD(message, stop_event=stop_event))
+        speak_task = asyncio.create_task(self._speaker.speak(message, stop_event))
+        await speak_task
+        lcd_task.cancel()
 
     @staticmethod
     def _is_network_connected():
