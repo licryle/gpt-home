@@ -92,13 +92,18 @@ async def toggle_dark_mode(request: Request):
         return JSONResponse(content={"error": str(e), "traceback": traceback.format_exc()}, status_code=500)
 
 ## Event Logs ##
+def tail(file_path, n=100):
+    try:
+        output = subprocess.check_output(["tail", f"-n{n}", str(file_path)])
+        return output.decode("utf-8").splitlines()
+    except subprocess.CalledProcessError as e:
+        print(f"tail failed: {e}")
+        return []
 
 @app.post("/logs")
 def logs(request: Request):
     if log_file_path.exists() and log_file_path.is_file():
-        with log_file_path.open("r") as f:
-            lines = f.readlines()
-            last_lines = lines[-LOGS_INITIAL_MAX_LINES:]  # Get last X lines
+        last_lines = tail(log_file_path, LOGS_INITIAL_MAX_LINES)
         cleaned_data = ''.join(last_lines).replace('`', '')
         return JSONResponse(content={"log_data": cleaned_data})
     else:
